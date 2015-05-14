@@ -754,7 +754,6 @@ entropy_dict(struct zxcvbn *zxcvbn, struct zxcvbn_match *match, const char *pass
     }
 
     if (upper) {
-        printf("XXXX %d\n", upper);
         min_lower_upper = MIN(lower, upper);
         possibilities = 0;
         for (i = 0; i <= min_lower_upper; ++i)
@@ -911,14 +910,48 @@ zxcvbn_init(struct zxcvbn *zxcvbn_buf,
         case '@':
             l33t = 'a';
             break;
+        case '8':
+            l33t = 'b';
+            break;
+        case '(':
+        case '{':
+        case '[':
+        case '<':
+            l33t = 'c';
+            break;
+        case '3':
+            l33t = 'e';
+            break;
+        case '6':
+        case '9':
+            l33t = 'g';
+            break;
+        case '1':
+        case '!':
+        case '|':
+        case 'i':
+            l33t = 'l';
+            break;
+        case '0':
+            l33t = 'o';
+            break;
         case '$':
         case '5':
             l33t = 's';
             break;
+        case '+':
+        case '7':
+            l33t = 't';
+            break;
+        case '%':
+            l33t = 'x';
+            break;
+        case '2':
+            l33t = 'z';
+            break;
         default:
             continue;
         }
-        zxcvbn->pack_table_size--;
         zxcvbn->pack_table[ch] = zxcvbn->pack_table[l33t];
     }
 
