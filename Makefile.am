@@ -4,7 +4,7 @@ zxcvbn_cli_LDADD=libzxcvbn.la
 
 lib_LTLIBRARIES=libzxcvbn.la
 libzxcvbn_la_SOURCES=zxcvbn.c
-libzxcvbn_la_LDFLAGS="-lm"
+libzxcvbn_la_LDFLAGS=-lm
 
 include_HEADERS=zxcvbn.h
 

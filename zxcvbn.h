@@ -2,11 +2,23 @@
 #define ZXCVBN_H
 
 #include <stddef.h>
+#include <stdint.h>
 #include <sys/queue.h>
 
 LIST_HEAD(zxcvbn_dict_head, zxcvbn_dict);
 
 struct zxcvbn_node;
+
+#define ZXCVBN_DATE_ONLY_YEAR   (1 << 0)
+#define ZXCVBN_DATE_FULL_YEAR   (1 << 1)
+#define ZXCVBN_DATE_SEPARATOR   (1 << 2)
+
+struct zxcvbn_date {
+    uint8_t     day;
+    uint8_t     month;
+    uint16_t    year;
+    uint8_t     flags;
+};
 
 struct zxcvbn_spatial_graph {
     const char *data[256][9];
@@ -37,7 +49,6 @@ struct zxcvbn {
     struct zxcvbn_spatial_graph spatial_graph_dvorak;
     struct zxcvbn_spatial_graph spatial_graph_keypad;
     struct zxcvbn_spatial_graph spatial_graph_macpad;
-    struct zxcvbn_spatial_graph spatial_graph_alphabet;
 };
 
 enum zxcvbn_match_type {
@@ -45,19 +56,25 @@ enum zxcvbn_match_type {
     ZXCVBN_MATCH_TYPE_SPATIAL,
     ZXCVBN_MATCH_TYPE_DIGITS,
     ZXCVBN_MATCH_TYPE_DATE,
+    ZXCVBN_MATCH_TYPE_SEQUENCE,
+    ZXCVBN_MATCH_TYPE_REPEAT,
     ZXCVBN_MATCH_TYPE_BRUTEFORCE,
 };
+
+#define ZXCVBN_MATCH_DESC_SEQ   (1 << 0)
 
 struct zxcvbn_match {
     enum zxcvbn_match_type type;
     CIRCLEQ_ENTRY(zxcvbn_match) list;
     struct zxcvbn_spatial_graph *spatial_graph;
+    union {
+        struct zxcvbn_sequence     *seq;
+        struct zxcvbn_date          date;
+    };
+    uint8_t                         flags;
     int i, j;
     unsigned int turns;
     unsigned int shifted;
-    unsigned int separator;
-    unsigned int long_year;
-    unsigned int only_year;
     unsigned int rank;
     double entropy;
 };

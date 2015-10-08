@@ -7,7 +7,7 @@
 #include <sys/time.h>
 #include "zxcvbn.h"
 
-#ifndef ARRAY_SIZE(a)
+#ifndef ARRAY_SIZE
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #endif
 
@@ -73,7 +73,6 @@ read_ranked(struct zxcvbn *zxcvbn, struct zxcvbn_dict *dict_buf, const char *nam
 
 err:
     fprintf(stderr, "zxcvbn_dict_add_word(\"%s\", \"%.*s\") failed\n", name, word_len, word);
-    zxcvbn_dict_release(dict);
     fclose(file);
     return NULL;
 }
@@ -84,24 +83,105 @@ print_usage()
     printf("Usage: zxcvbn_cli [ -h ] [ -d \"word0 word1 ... wordN\" ] { password0 } [ password1 ] ... [ passwordN]\n");
 }
 
+static char *
+escape_quotes(char *str)
+{
+    static char buf[128];
+    unsigned int i;
+
+    for (i = 0; *str && i < sizeof(buf) - 1; str++) {
+        if (strchr("\"\\", *str))
+            buf[i++] = '\\';
+        buf[i++] = *str;
+    }
+    buf[i] = '\0';
+    return buf;
+}
+
+static void
+process_bulk(int argc, char **argv)
+{
+    char buf[1024], *words[256], *p;
+    unsigned int words_num;
+    struct zxcvbn_res res;
+    struct zxcvbn *z;
+    size_t len;
+    int opt;
+
+    if (!(z = zxcvbn_init(NULL, NULL, NULL, NULL,
+                          "!@#$%^&*()-_+=;:,./?\\|`~[]{}"))) {
+        fprintf(stderr, "zxcvbn_init() failed\n");
+        exit(EXIT_FAILURE);
+    }
+
+    optind = 1;
+    opterr = 0;
+    while ((opt = getopt(argc, argv, "D:")) != -1) {
+        switch (opt) {
+            case 'D':
+                if (!read_ranked(z, NULL, optarg, optarg))
+                    exit(EXIT_FAILURE);
+                break;
+        }
+    }
+
+    while (fgets(buf, sizeof(buf), stdin)) {
+        words_num = 0;
+        len = strlen(buf);
+        if (buf[len - 1] == '\n')
+            buf[len - 1] = '\0';
+        p = strchr(buf, ' ');
+        if (p) {
+            *p = '\0';
+            for (p = strtok(p + 1, " "); p; p = strtok(NULL, " ")) {
+                if (words_num == ARRAY_SIZE(words))
+                    break;
+                words[words_num++] = p;
+            }
+        }
+
+        zxcvbn_res_init(&res, z);
+        if (zxcvbn_match(&res, buf, strlen(buf),
+                         words, words_num) < 0) {
+            printf("{\"password\": \"%s\", \"error\": true}\n",
+                   escape_quotes(buf));
+            fprintf(stderr, "zxcvbn_match(\"%s\") failed\n",
+                    escape_quotes(buf));
+            zxcvbn_res_release(&res);
+            continue;
+        }
+        printf("{\"password\": \"%s\", \"entropy\": %.1lf}\n",
+               escape_quotes(buf), res.entropy);
+        zxcvbn_res_release(&res);
+    }
+    if (ferror(stdin)) {
+        fprintf(stderr, "fgets(stdin) failed\n");
+        exit(EXIT_FAILURE);
+    }
+    exit(EXIT_SUCCESS);
+}
+
 int
 main(int argc, char **argv)
 {
     const char *password;
     char *dict_words[256], *dict_word;
     unsigned int n_dict_words;
-    int i, rc, opt;
-    FILE *file;
+    int i, opt;
     struct timeval tv0, tv1;
     struct zxcvbn zxcvbn_buf;
     struct zxcvbn *zxcvbn;
     struct zxcvbn_res res;
     struct zxcvbn_match *match;
-    struct zxcvbn_dict dict_buf[2];
 
     n_dict_words = 0;
 
-    while ((opt = getopt(argc, argv, "hd:")) != -1) {
+    if ((zxcvbn = zxcvbn_init(&zxcvbn_buf, NULL, NULL, NULL, "!@#$%^&*()-_+=;:,./?\\|`~[]{}")) == NULL) {
+        fprintf(stderr, "zxcvbn_init() failed\n");
+        return EXIT_FAILURE;
+    }
+
+    while ((opt = getopt(argc, argv, "D:hd:b")) != -1) {
         switch (opt) {
         case 'h':
             print_usage();
@@ -114,6 +194,15 @@ main(int argc, char **argv)
                 dict_words[n_dict_words++] = dict_word;
             }
             break;
+
+        case 'b':
+            process_bulk(argc, argv);
+            return EXIT_SUCCESS;
+
+        case 'D':
+            read_ranked(zxcvbn, NULL, optarg, optarg);
+            break;
+
         default:
             print_usage();
             return EXIT_FAILURE;
@@ -125,14 +214,6 @@ main(int argc, char **argv)
         print_usage();
         return EXIT_FAILURE;
     }
-
-    if ((zxcvbn = zxcvbn_init(&zxcvbn_buf, NULL, NULL, NULL, "!@#$%^&*()-_+=;:,./?\\|`~[]{}")) == NULL) {
-        fprintf(stderr, "zxcvbn_init() failed\n");
-        return EXIT_FAILURE;
-    }
-
-    read_ranked(zxcvbn, dict_buf + 0, "password", "common_passwords.txt");
-    read_ranked(zxcvbn, dict_buf + 1, "english", "english.txt");
 
     for (i = optind; argv[i] != NULL; ++i) {
         password = argv[i];
