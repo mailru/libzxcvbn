@@ -350,12 +350,12 @@ push_match_bruteforce(struct zxcvbn_res *res,
     return match;
 }
 
-int
+static int
 match_spatial_iter(struct zxcvbn_res *res,
                    const char *password, unsigned int password_len, struct zxcvbn_spatial_graph *spatial_graph)
 {
     int i, j, cur_dir, prv_dir, turns, shifted;
-    char cur, prv;
+    unsigned char cur, prv;
     const char *s, *p;
 
     i = j = 0;
@@ -750,7 +750,7 @@ zxcvbn_date_match_nosep(struct zxcvbn_res *res,
     uint8_t *split;
 
     i = 0;
-    while (i < password_len - ZXCVBN_DATE_MIN_NOSEP_LEN + 1) {
+    while (i + ZXCVBN_DATE_MIN_NOSEP_LEN - 1 < password_len) {
         if (!isdigit(password[i])) {
             i++;
             continue;
@@ -961,7 +961,7 @@ pack_word(struct zxcvbn *zxcvbn, char *dst, const char *src, unsigned int len)
     int i;
 
     for (i = 0; i < len; ++i)
-        dst[i] = zxcvbn->pack_table[tolower(src[i])];
+        dst[i] = zxcvbn->pack_table[(unsigned char) tolower(src[i])];
 
     return dst;
 }
@@ -1029,7 +1029,7 @@ static void
 entropy_dict(struct zxcvbn *zxcvbn, struct zxcvbn_match *match, const char *password, unsigned int password_len)
 {
     int i, ch, upper, lower, min_lower_upper;
-    unsigned long possibilities;
+    double possibilities;
 
     match->entropy = log2(match->rank);
 
@@ -1062,7 +1062,7 @@ entropy_spatial(struct zxcvbn *zxcvbn, struct zxcvbn_match *match)
 {
     int i, j;
     unsigned int length, turns, possible_turns, S, U, min_SU;
-    unsigned long possibilities;
+    double possibilities;
     struct zxcvbn_spatial_graph *spatial_graph;
 
     spatial_graph = match->spatial_graph;

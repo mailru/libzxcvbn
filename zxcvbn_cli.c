@@ -102,11 +102,13 @@ static void
 process_bulk(int argc, char **argv)
 {
     char buf[1024], *words[256], *p;
+    struct timeval st, et;
     unsigned int words_num;
     struct zxcvbn_res res;
     struct zxcvbn *z;
     size_t len;
     int opt;
+    long t;
 
     if (!(z = zxcvbn_init(NULL, NULL, NULL, NULL,
                           "!@#$%^&*()-_+=;:,./?\\|`~[]{}"))) {
@@ -141,6 +143,7 @@ process_bulk(int argc, char **argv)
         }
 
         zxcvbn_res_init(&res, z);
+        gettimeofday(&st, NULL);
         if (zxcvbn_match(&res, buf, strlen(buf),
                          words, words_num) < 0) {
             printf("{\"password\": \"%s\", \"error\": true}\n",
@@ -150,8 +153,10 @@ process_bulk(int argc, char **argv)
             zxcvbn_res_release(&res);
             continue;
         }
-        printf("{\"password\": \"%s\", \"entropy\": %.1lf}\n",
-               escape_quotes(buf), res.entropy);
+        gettimeofday(&et, NULL);
+        t = (et.tv_sec - st.tv_sec) * 1000000 + et.tv_usec - st.tv_usec;
+        printf("{\"password\": \"%s\", \"entropy\": %.1lf, \"time\": %lu}\n",
+               escape_quotes(buf), res.entropy, t);
         zxcvbn_res_release(&res);
     }
     if (ferror(stdin)) {
