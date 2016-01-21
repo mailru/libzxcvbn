@@ -2,7 +2,5 @@ libzxcvbn - is c library implements zxcvbn algorithm invented by Dropbox and @lo
 zxcvbn_cli - is console zxcvbn utility
 
 Build:
-./autogen.sh
-./configure
-make
-make install
+scons
+scons install

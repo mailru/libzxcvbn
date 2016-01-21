@@ -1,0 +1,6 @@
+.sconsign.dblite
+*.o
+*.os
+cscope.*
+libzxcvbn.so*
+zxcvbn_cli

@@ -852,6 +852,7 @@ zxcvbn_date_match_sep(struct zxcvbn_res *res,
     char ch;
 
     i = 0;
+    end = 0;
     while (i + ZXCVBN_DATE_MIN_SEP_LEN - 1 < password_len) {
         if (!isdigit(password[i])) {
             i++;
