@@ -1,4 +1,4 @@
-version = '0.1.1'
+version = '0.1.2'
 
 common_cflags = '-g -O2 -D_GNU_SOURCE -Wall -Wextra -Wmissing-prototypes ' + \
                 '-Wno-sign-compare -Wno-char-subscripts -Wno-unused-parameter'
@@ -22,4 +22,4 @@ zxcvbn_cli = env.Program('zxcvbn_cli', 'zxcvbn_cli.c',
 Default([libzxcvbn, zxcvbn_cli])
 
 env.Alias('install', [env.InstallVersionedLib('$LIBDIR', libzxcvbn),
-                      env.Install('$PREFIX/bin', zxcvbn_cli)])
+                      env.Install('$PREFIX/include', 'zxcvbn.h')])

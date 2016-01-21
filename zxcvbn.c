@@ -363,17 +363,23 @@ match_spatial_iter(struct zxcvbn_res *res,
     turns = 0;
     shifted = 0;
     
-    while (1) {
+    while (i < password_len - 2) {
         prv = password[j];
         ++j;
-        cur = password[j];
+        if (j < password_len) {
+            cur = password[j];
 
-        for (cur_dir = 0; cur_dir < spatial_graph->n_coords; ++cur_dir) {
-            s = spatial_graph->data[prv][cur_dir];
-            for (p = s; p - s < spatial_graph->token_size; ++p) {
-                if (*p == cur) {
-                    shifted += p != s;
-                    goto found;
+            for (cur_dir = 0; cur_dir < spatial_graph->n_coords; ++cur_dir) {
+                s = spatial_graph->data[prv][cur_dir];
+                for (p = s; p - s < spatial_graph->token_size; ++p) {
+                    if (*p == cur) {
+                        shifted += p != s;
+                        if (cur_dir != prv_dir) {
+                            ++turns;
+                            prv_dir = cur_dir;
+                        }
+                        continue;
+                    }
                 }
             }
         }
@@ -387,16 +393,6 @@ match_spatial_iter(struct zxcvbn_res *res,
         prv_dir = -1;
         turns = 0;
         shifted = 0;
-
-        if (i == password_len)
-            break;
-
-        continue;
-found:
-        if (cur_dir != prv_dir) {
-            ++turns;
-            prv_dir = cur_dir;
-        }
     }
  
     return 0;
