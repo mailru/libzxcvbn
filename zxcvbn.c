@@ -363,7 +363,7 @@ match_spatial_iter(struct zxcvbn_res *res,
     turns = 0;
     shifted = 0;
     
-    while (i < password_len - 2) {
+    while (i + 2 < password_len) {
         prv = password[j];
         ++j;
         if (j < password_len) {
@@ -638,8 +638,8 @@ zxcvbn_date_probe_year(struct zxcvbn_date *date, char *str)
 }
 
 static uint8_t
-zxcvbn_date_probe(struct zxcvbn_date *date, uint16_t *nums,
-                  uint8_t flags)
+zxcvbn_date_probe(struct zxcvbn_date *date, uint16_t *nums, uint8_t flags,
+                  struct zxcvbn_date *dates, uint32_t dates_num)
 {
     static uint8_t meanings[] = {2, 1, 1, 2, 0, 1, 1, 0};
     struct zxcvbn_date temp, best;
@@ -659,12 +659,13 @@ zxcvbn_date_probe(struct zxcvbn_date *date, uint16_t *nums,
     if (over_31 >= 2 || over_12 == 3 || equal_0 >= 2)
         return 0;
 
-    temp.flags = (flags & ZXCVBN_DATE_PROBE_FULL_YEAR ?
-                  ZXCVBN_DATE_FULL_YEAR : 0);
-    best.day = 0;
+    memset(&best, 0, sizeof(best));
     for (m = 1; m < 4; m <<= 1) {
         if (!(flags & m))
             continue;
+        memset(&temp, 0, sizeof(temp));
+        temp.flags = (flags & ZXCVBN_DATE_PROBE_FULL_YEAR ?
+                      ZXCVBN_DATE_FULL_YEAR : 0);
         temp.year = nums[m & 2];
         if (temp.flags & ZXCVBN_DATE_FULL_YEAR) {
             if ((temp.year < ZXCVBN_DATE_MIN_YEAR ||
@@ -679,6 +680,15 @@ zxcvbn_date_probe(struct zxcvbn_date *date, uint16_t *nums,
             if (temp.day == 0 || temp.day > 31 ||
                     temp.month == 0 || temp.month > 12)
                 continue;
+            for (i = 0; i < dates_num; i++) {
+                if (temp.day == dates[i].day &&
+                        temp.month == dates[i].month &&
+                        temp.year == dates[i].year) {
+                    memcpy(date, &temp, sizeof(temp));
+                    date->flags |= ZXCVBN_DATE_FROM_LIST;
+                    return 1;
+                }
+            }
             if (!best.day ||
                     abs(best.year - ZXCVBN_DATE_REF_YEAR) >
                     abs(temp.year - ZXCVBN_DATE_REF_YEAR))
@@ -693,7 +703,8 @@ zxcvbn_date_probe(struct zxcvbn_date *date, uint16_t *nums,
 
 static uint8_t
 zxcvbn_date_probe_split(struct zxcvbn_date *date,
-                        char *str, uint32_t len, uint8_t *split)
+                        char *str, uint32_t len, uint8_t *split,
+                        struct zxcvbn_date *dates, unsigned int dates_num)
 {
     uint8_t len2, flags;
     uint16_t nums[3];
@@ -710,7 +721,7 @@ zxcvbn_date_probe_split(struct zxcvbn_date *date,
         flags &= ~ZXCVBN_DATE_PROBE_LEFT_YEAR;
     if (split[0] == 4 || len2 == 4)
         flags |= ZXCVBN_DATE_PROBE_FULL_YEAR;
-    return zxcvbn_date_probe(date, nums, flags);
+    return zxcvbn_date_probe(date, nums, flags, dates, dates_num);
 }
 
 static struct zxcvbn_match *
@@ -731,7 +742,8 @@ zxcvbn_date_add_match(struct zxcvbn_res *res, uint32_t i, uint32_t j,
 
 static int8_t
 zxcvbn_date_match_nosep(struct zxcvbn_res *res,
-                        char *password, int password_len)
+                        char *password, int password_len,
+                        struct zxcvbn_date *dates, unsigned int dates_num)
 {
     static uint8_t split4[][2] = {{1, 2}, {2, 3}, {0, 0}},
                    split5[][2] = {{1, 3}, {2, 3}, {0, 0}},
@@ -742,7 +754,7 @@ zxcvbn_date_match_nosep(struct zxcvbn_res *res,
         split4[0], split5[0], split6[0], split7[0], split8[0]
     };
     struct zxcvbn_date best, date;
-    uint32_t len, i, j, k;
+    uint32_t len, i, j, k, d;
     uint8_t *split;
 
     i = 0;
@@ -765,20 +777,30 @@ zxcvbn_date_match_nosep(struct zxcvbn_res *res,
 
                 /* probe only year */
                 if (j == 4 && zxcvbn_date_probe_year(&date, password + k)) {
+                    for (d = 0; d < dates_num; d++) {
+                        if (date.year == dates[d].year) {
+                            date.flags |= ZXCVBN_DATE_FROM_LIST;
+                            break;
+                        }
+                    }
                     if (!zxcvbn_date_add_match(res, k, k + j - 1, &date))
                         return -1;
                     continue;
                 }
 
                 /* probe full date */
-                best.day = 0;
+                memset(&best, 0, sizeof(best));
                 split = splits[j - ZXCVBN_DATE_MIN_NOSEP_LEN];
                 while (split[0]) {
-                    if (zxcvbn_date_probe_split(&date, password + k, j, split)) {
+                    if (zxcvbn_date_probe_split(&date, password + k, j, split,
+                                                dates, dates_num)) {
                         if (!best.day ||
+                                (date.flags & ZXCVBN_DATE_FROM_LIST) ||
                                 abs(best.year - ZXCVBN_DATE_REF_YEAR) >
                                 abs(date.year - ZXCVBN_DATE_REF_YEAR))
                             memcpy(&best, &date, sizeof(date));
+                        if (best.flags & ZXCVBN_DATE_FROM_LIST)
+                            break;
                     }
                     split += 2;
                 }
@@ -795,7 +817,8 @@ zxcvbn_date_match_nosep(struct zxcvbn_res *res,
 
 static int8_t
 zxcvbn_date_match_sep(struct zxcvbn_res *res,
-                      char *password, int password_len)
+                      char *password, int password_len,
+                      struct zxcvbn_date *dates, unsigned int dates_num)
 {
     static struct zxcvbn_date_state states[] = {
         /*          d   s   x       skip  num try p_fl */
@@ -856,7 +879,7 @@ zxcvbn_date_match_sep(struct zxcvbn_res *res,
         }
 
         state = states;
-        best.day = 0;
+        memset(&best, 0, sizeof(best));
         n = password[i] - '0';
         for (j = i + 1;; j++) {
             if (j < password_len) {
@@ -882,11 +905,25 @@ zxcvbn_date_match_sep(struct zxcvbn_res *res,
                 n = 0;
             if (!state->try)
                 continue;
-            if (zxcvbn_date_probe(&date, nums, state->probe_flags)) {
-                if (!best.day ||
-                        abs(best.year - ZXCVBN_DATE_REF_YEAR) >
-                        abs(date.year - ZXCVBN_DATE_REF_YEAR) ||
-                        end < j) {
+            if (zxcvbn_date_probe(&date, nums, state->probe_flags,
+                                  dates, dates_num)) {
+                int replace = 0;
+
+                if (!best.day)
+                    replace = 1;
+                else {
+                    if (best.flags & ZXCVBN_DATE_FROM_LIST) {
+                        if ((date.flags & ZXCVBN_DATE_FROM_LIST) && end < j)
+                            replace = 1;
+                    } else {
+                        if ((date.flags & ZXCVBN_DATE_FROM_LIST) ||
+                                abs(best.year - ZXCVBN_DATE_REF_YEAR) >
+                                abs(date.year - ZXCVBN_DATE_REF_YEAR) ||
+                                end < j)
+                            replace = 1;
+                    }
+                }
+                if (replace) {
                     memcpy(&best, &date, sizeof(date));
                     end = j;
                 }
@@ -903,11 +940,12 @@ zxcvbn_date_match_sep(struct zxcvbn_res *res,
 }
 
 static int8_t
-zxcvbn_date_match(struct zxcvbn_res *res, char *password, int password_len)
+zxcvbn_date_match(struct zxcvbn_res *res, char *password, int password_len,
+                  struct zxcvbn_date *dates, unsigned int dates_num)
 {
-    if (zxcvbn_date_match_nosep(res, password, password_len))
+    if (zxcvbn_date_match_nosep(res, password, password_len, dates, dates_num))
         return -1;
-    if (zxcvbn_date_match_sep(res, password, password_len))
+    if (zxcvbn_date_match_sep(res, password, password_len, dates, dates_num))
         return -1;
     return 0;
 }
@@ -917,11 +955,15 @@ zxcvbn_date_calculate_entropy(struct zxcvbn *zxcvbn, struct zxcvbn_match *match)
 {
     double possib;
 
-    possib = fmax(abs(match->date.year - ZXCVBN_DATE_REF_YEAR),
-                         ZXCVBN_DATE_MIN_YEAR_SPACE);
-    if (!(match->date.flags & ZXCVBN_DATE_ONLY_YEAR))
-        possib *= 12 * 31;
-    match->entropy = log2(possib);
+    if (match->date.flags & ZXCVBN_DATE_FROM_LIST)
+        match->entropy = 0;
+    else {
+        possib = fmax(abs(match->date.year - ZXCVBN_DATE_REF_YEAR),
+                             ZXCVBN_DATE_MIN_YEAR_SPACE);
+        if (!(match->date.flags & ZXCVBN_DATE_ONLY_YEAR))
+            possib *= 12 * 31;
+        match->entropy = log2(possib);
+    }
     if (match->date.flags & ZXCVBN_DATE_FULL_YEAR)
         match->entropy += 1;
     if (match->date.flags & ZXCVBN_DATE_SEPARATOR)
@@ -1271,8 +1313,10 @@ min_entropy(struct zxcvbn_res *res, const char *password, unsigned int password_
 }
 
 int
-zxcvbn_match(struct zxcvbn_res *res, const char *password, unsigned int password_len,
-             char **dict_words, unsigned int n_dict_words)
+zxcvbn_match_ex(struct zxcvbn_res *res,
+                const char *password,      unsigned int password_len,
+                char **words,              unsigned int words_num,
+                struct zxcvbn_date *dates, unsigned int dates_num)
 {
     int i;
     struct zxcvbn *zxcvbn;
@@ -1281,17 +1325,21 @@ zxcvbn_match(struct zxcvbn_res *res, const char *password, unsigned int password
     assert(password_len > 0);
     assert(password_len <= ZXCVBN_PASSWORD_LEN_MAX);
 
+    if (!dates)
+        dates_num = 0;
+
     if (match_spatial(res, password, password_len))
         return -1;
     if (match_digits(res, password, password_len))
         return -1;
-    if (zxcvbn_date_match(res, (char *) password, password_len))
+    if (zxcvbn_date_match(res, (char *) password, password_len,
+                          dates, dates_num))
         return -1;
     if (zxcvbn_sequence_match(res, (char *) password, password_len))
         return -1;
     if (zxcvbn_repeat_match(res, (char *) password, password_len))
         return -1;
-    if (match_dict(res, password, password_len, dict_words, n_dict_words))
+    if (match_dict(res, password, password_len, words, words_num))
         return -1;
 
     zxcvbn = res->zxcvbn;
@@ -1325,6 +1373,15 @@ zxcvbn_match(struct zxcvbn_res *res, const char *password, unsigned int password
     }
 
     return min_entropy(res, password, password_len);
+}
+
+int
+zxcvbn_match(struct zxcvbn_res *res,
+             const char *password, unsigned int password_len,
+             char **words,         unsigned int words_num)
+{
+    return zxcvbn_match_ex(res, password, password_len, words, words_num,
+                           NULL, 0);
 }
 
 static void

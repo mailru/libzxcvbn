@@ -80,7 +80,7 @@ err:
 static void
 print_usage()
 {
-    printf("Usage: zxcvbn_cli [ -h ] [ -d \"word0 word1 ... wordN\" ] { password0 } [ password1 ] ... [ passwordN]\n");
+    printf("Usage: zxcvbn_cli [ -h ] [ -t \"31-12-2000 30-11-1999 ...\" ] [ -d \"word0 word1 ... wordN\" ] { password0 } [ password1 ] ... [ passwordN]\n");
 }
 
 static char *
@@ -166,27 +166,43 @@ process_bulk(int argc, char **argv)
     exit(EXIT_SUCCESS);
 }
 
+static void
+parse_date(char *str, struct zxcvbn_date *date)
+{
+    struct tm tm;
+
+    if (!strptime(str, "%d-%m-%Y", &tm)) {
+        fprintf(stderr, "strptime(\"%s\") failed\n", str);
+        exit(EXIT_FAILURE);
+    }
+    date->day = tm.tm_mday;
+    date->month = tm.tm_mon + 1;
+    date->year = tm.tm_year + 1900;
+}
+
 int
 main(int argc, char **argv)
 {
     const char *password;
-    char *dict_words[256], *dict_word;
-    unsigned int n_dict_words;
+    char *dict_words[256], *dict_word, *str;
+    unsigned int n_dict_words, dates_num;
     int i, opt;
     struct timeval tv0, tv1;
     struct zxcvbn zxcvbn_buf;
     struct zxcvbn *zxcvbn;
     struct zxcvbn_res res;
     struct zxcvbn_match *match;
+    struct zxcvbn_date dates[32];
 
     n_dict_words = 0;
+    dates_num = 0;
 
     if ((zxcvbn = zxcvbn_init(&zxcvbn_buf, NULL, NULL, NULL, "!@#$%^&*()-_+=;:,./?\\|`~[]{}")) == NULL) {
         fprintf(stderr, "zxcvbn_init() failed\n");
         return EXIT_FAILURE;
     }
 
-    while ((opt = getopt(argc, argv, "D:hd:b")) != -1) {
+    while ((opt = getopt(argc, argv, "D:hd:bt:")) != -1) {
         switch (opt) {
         case 'h':
             print_usage();
@@ -197,6 +213,14 @@ main(int argc, char **argv)
                 if (n_dict_words == ARRAY_SIZE(dict_words))
                     break;
                 dict_words[n_dict_words++] = dict_word;
+            }
+            break;
+
+        case 't':
+            for (str = strtok(optarg, " "); str != NULL; str = strtok(NULL, " ")) {
+                if (dates_num == ARRAY_SIZE(dates))
+                    break;
+                parse_date(str, dates + dates_num++);
             }
             break;
 
@@ -226,7 +250,8 @@ main(int argc, char **argv)
         zxcvbn_res_init(&res, zxcvbn);
 
         gettimeofday(&tv0, NULL);
-        if (zxcvbn_match(&res, password, strlen(password), dict_words, n_dict_words) < 0) {
+        if (zxcvbn_match_ex(&res, password, strlen(password),
+                            dict_words, n_dict_words, dates, dates_num) < 0) {
             fprintf(stderr, "zxcvbn_match(\"%s\") failed\n", password);
             continue;
         }

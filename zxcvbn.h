@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/queue.h>
+#include <time.h>
 
 LIST_HEAD(zxcvbn_dict_head, zxcvbn_dict);
 
@@ -12,6 +13,8 @@ struct zxcvbn_node;
 #define ZXCVBN_DATE_ONLY_YEAR   (1 << 0)
 #define ZXCVBN_DATE_FULL_YEAR   (1 << 1)
 #define ZXCVBN_DATE_SEPARATOR   (1 << 2)
+/* date from passed list of dates */
+#define ZXCVBN_DATE_FROM_LIST   (1 << 3)
 
 struct zxcvbn_date {
     uint8_t     day;
@@ -111,8 +114,15 @@ void
 zxcvbn_res_release(struct zxcvbn_res *res);
 
 int
-zxcvbn_match(struct zxcvbn_res *res, const char *password, unsigned int password_len,
-             char **dict_words, unsigned int n_dict_words);
+zxcvbn_match(struct zxcvbn_res *res,
+             const char *password, unsigned int password_len,
+             char **words,         unsigned int words_num);
+
+int
+zxcvbn_match_ex(struct zxcvbn_res *res,
+                const char *password,      unsigned int password_len,
+                char **words,              unsigned int words_num,
+                struct zxcvbn_date *dates, unsigned int dates_num);
 
 const char *
 zxcvbn_match_type_string(enum zxcvbn_match_type type);

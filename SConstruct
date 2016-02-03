@@ -1,4 +1,4 @@
-version = '0.1.2'
+version = '0.2.0'
 
 common_cflags = '-g -O2 -D_GNU_SOURCE -Wall -Wextra -Wmissing-prototypes ' + \
                 '-Wno-sign-compare -Wno-char-subscripts -Wno-unused-parameter'
