@@ -564,27 +564,20 @@ zxcvbn_sequence_calculate_entropy(struct zxcvbn *zxcvbn,
 /* Sequence ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
 
 static int
-match_digits(struct zxcvbn_res *res, const char *password, unsigned int password_len)
+match_digits(struct zxcvbn_res *res,
+             const char *password, unsigned int password_len)
 {
-    int i, j;
+    int last = -1, i;
 
-    i = j = 0;
-
-    while (1) {
-        if (isdigit(password[j])) {
-            ++j;
-        } else {
-            if (j - i > 2) {
-                if (push_match(res, ZXCVBN_MATCH_TYPE_DIGITS, NULL, i, j - 1, 0, 0) == NULL)
-                    return -1;
-            }
-            if (j == password_len)
-                break;
-            ++j;
-            i = j;
+    for (i = 0; i <= password_len; i++) {
+        if (i == password_len || !isdigit(password[i])) {
+            if (i - last - 1 > 2 &&
+                    !push_match(res, ZXCVBN_MATCH_TYPE_DIGITS, NULL,
+                                last + 1, i - 1, 0, 0))
+                return -1;
+            last = i;
         }
     }
-
     return 0;
 }
 
