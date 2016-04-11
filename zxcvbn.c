@@ -282,7 +282,15 @@ match_add(struct zxcvbn_res *res)
 {
     size_t size;
     if (res->n_matches_reserved == res->n_matches) {
-        res->n_matches_reserved += ARRAY_SIZE(res->match_buf);
+        if (!res->zxcvbn->max_matches_num)
+            res->n_matches_reserved += ARRAY_SIZE(res->match_buf);
+        else {
+            if (res->n_matches_reserved >= res->zxcvbn->max_matches_num)
+                return NULL;
+            res->n_matches_reserved =
+                    MIN(res->n_matches_reserved + ARRAY_SIZE(res->match_buf),
+                        res->zxcvbn->max_matches_num);
+        }
         size = sizeof(struct zxcvbn_match) * res->n_matches_reserved;
         if (res->matches == res->match_buf) {
             if ((res->matches = __malloc(res->zxcvbn, size)) == NULL)
@@ -1130,44 +1138,44 @@ entropy_digits(struct zxcvbn *zxcvbn, struct zxcvbn_match *match)
 }
 
 struct zxcvbn *
-zxcvbn_init(struct zxcvbn *zxcvbn_buf,
-            void *(*zxcvbn_malloc)(size_t size),
-            void *(*zxcvbn_realloc)(void *ptr, size_t size),
-            void (*zxcvbn_free)(void *ptr),
-            const char *symbols)
+zxcvbn_init_ex(struct zxcvbn *zxcvbn, struct zxcvbn_opts *opts)
 {
+    static struct zxcvbn_opts default_opts;
+    zxcvbn_malloc_t malloc_;
     int i, l33t;
     const char *s;
-    struct zxcvbn *zxcvbn;
 
-    if (zxcvbn_malloc == NULL) {
-        assert(zxcvbn_realloc == NULL);
-        assert(zxcvbn_free == NULL);
+    if (!opts)
+        opts = &default_opts;
+    malloc_ = (opts->malloc ? opts->malloc : malloc);
 
-        zxcvbn_malloc = malloc;
-        zxcvbn_realloc = realloc;
-        zxcvbn_free = free;
-    } else {
-        assert(zxcvbn_realloc != NULL);
-        assert(zxcvbn_free != NULL);
-    }
-
-    if (zxcvbn_buf == NULL) {
-        if ((zxcvbn = (*zxcvbn_malloc)(sizeof(struct zxcvbn))) == NULL)
+    if (zxcvbn)
+        memset(zxcvbn, 0, sizeof(*zxcvbn));
+    else {
+        if (!(zxcvbn = malloc_(sizeof(*zxcvbn))))
             return NULL;
-    } else {
-        zxcvbn = zxcvbn_buf;
+        memset(zxcvbn, 0, sizeof(*zxcvbn));
+        zxcvbn->allocated = 1;
     }
 
-    memset(zxcvbn, 0, sizeof(*zxcvbn));
+    zxcvbn->zxcvbn_malloc = malloc_;
+    if (opts->malloc) {
+        assert(opts->realloc);
+        assert(opts->free);
+
+        zxcvbn->zxcvbn_realloc = opts->realloc;
+        zxcvbn->zxcvbn_free = opts->free;
+    } else {
+        assert(!opts->realloc);
+        assert(!opts->free);
+
+        zxcvbn->zxcvbn_realloc = realloc;
+        zxcvbn->zxcvbn_free = free;
+    }
+
+    zxcvbn->max_matches_num = opts->max_matches_num;
 
     LIST_INIT(&zxcvbn->dict_head);
-
-    zxcvbn->zxcvbn_malloc = zxcvbn_malloc;
-    zxcvbn->zxcvbn_realloc = zxcvbn_realloc;
-    zxcvbn->zxcvbn_free = zxcvbn_free;
-
-    zxcvbn->allocated = zxcvbn_buf == NULL;
 
     memset(zxcvbn->pack_table, '.', sizeof(zxcvbn->pack_table));
 
@@ -1177,7 +1185,7 @@ zxcvbn_init(struct zxcvbn *zxcvbn_buf,
     for (i = '0'; i <= '9'; ++i)
         zxcvbn->pack_table[i] = zxcvbn->pack_table_size++;
 
-    for (s = symbols; *s != '\0'; ++s) {
+    for (s = opts->symbols; *s != '\0'; ++s) {
         if (zxcvbn->pack_table[*s] == '.') {
             zxcvbn->pack_table[*s] = zxcvbn->pack_table_size++;
             zxcvbn->n_symbols++;
@@ -1237,6 +1245,23 @@ zxcvbn_init(struct zxcvbn *zxcvbn_buf,
     make_spatial_graph(zxcvbn);
 
     return zxcvbn;
+}
+
+struct zxcvbn *
+zxcvbn_init(struct zxcvbn *zxcvbn_buf,
+            void *(*zxcvbn_malloc)(size_t size),
+            void *(*zxcvbn_realloc)(void *ptr, size_t size),
+            void (*zxcvbn_free)(void *ptr),
+            const char *symbols)
+{
+    struct zxcvbn_opts opts;
+
+    zxcvbn_opts_init(&opts);
+    opts.malloc = zxcvbn_malloc;
+    opts.realloc = zxcvbn_realloc;
+    opts.free = zxcvbn_free;
+    opts.symbols = symbols;
+    return zxcvbn_init_ex(zxcvbn_buf, &opts);
 }
 
 static int

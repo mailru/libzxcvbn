@@ -16,6 +16,20 @@ struct zxcvbn_node;
 /* date from passed list of dates */
 #define ZXCVBN_DATE_FROM_LIST   (1 << 3)
 
+#define zxcvbn_opts_init(o)     memset((o), 0, sizeof(*o))
+
+typedef void *(*zxcvbn_malloc_t)(size_t size);
+typedef void *(*zxcvbn_realloc_t)(void *ptr, size_t size);
+typedef void (*zxcvbn_free_t)(void *ptr);
+
+struct zxcvbn_opts {
+    zxcvbn_malloc_t     malloc;
+    zxcvbn_realloc_t    realloc;
+    zxcvbn_free_t       free;
+    const char         *symbols;
+    unsigned int        max_matches_num;
+};
+
 struct zxcvbn_date {
     uint8_t     day;
     uint8_t     month;
@@ -52,6 +66,7 @@ struct zxcvbn {
     struct zxcvbn_spatial_graph spatial_graph_dvorak;
     struct zxcvbn_spatial_graph spatial_graph_keypad;
     struct zxcvbn_spatial_graph spatial_graph_macpad;
+    unsigned int max_matches_num;
 };
 
 enum zxcvbn_match_type {
@@ -100,6 +115,9 @@ zxcvbn_init(struct zxcvbn *zxcvbn_buf,
             void *(*zxcvbn_realloc)(void *ptr, size_t size),
             void (*zxcvbn_free)(void *ptr),
             const char *symbols);
+
+struct zxcvbn *
+zxcvbn_init_ex(struct zxcvbn *zxcvbn, struct zxcvbn_opts *opts);
 
 struct zxcvbn_dict *
 zxcvbn_dict_init(struct zxcvbn *zxcvbn, struct zxcvbn_dict *dict_buf, const char *name);
