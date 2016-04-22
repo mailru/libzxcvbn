@@ -1021,7 +1021,7 @@ match_dict(struct zxcvbn_res *res, const char *password, unsigned int password_l
 
     for (i = 0; i < n_dict_words; ++i) {
         dict_word_len = strlen(dict_words[i]);
-        if (password_len < dict_word_len)
+        if (!dict_word_len || password_len < dict_word_len)
             continue;
         pack_dict_word = pack_word(zxcvbn, dict_words[i],
                                    dict_words[i], dict_word_len);
@@ -1030,8 +1030,9 @@ match_dict(struct zxcvbn_res *res, const char *password, unsigned int password_l
             if ((remain = password_len - (s - pack_password)) <= 0 ||
                     !(s = memmem(s, remain, pack_dict_word, dict_word_len)))
                 break;
-            push_match_dict(res, s - pack_password,
-                            s - pack_password + dict_word_len - 1, 1);
+            if (!push_match_dict(res, s - pack_password,
+                                 s - pack_password + dict_word_len - 1, 1))
+                return -1;
             s += dict_word_len;
         }
     }
