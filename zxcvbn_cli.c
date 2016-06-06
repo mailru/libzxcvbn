@@ -32,7 +32,7 @@ trim(char *string)
         ++e;
     }
 
-    string[e - b] = '\0';
+    *e = '\0';
 
     return b;
 }
