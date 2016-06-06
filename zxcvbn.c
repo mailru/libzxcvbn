@@ -1175,6 +1175,7 @@ zxcvbn_init_ex(struct zxcvbn *zxcvbn, struct zxcvbn_opts *opts)
     }
 
     zxcvbn->max_matches_num = opts->max_matches_num;
+    zxcvbn->skipped_match_types = opts->skipped_match_types;
 
     LIST_INIT(&zxcvbn->dict_head);
 
@@ -1274,6 +1275,9 @@ min_entropy(struct zxcvbn_res *res, const char *password, unsigned int password_
     struct zxcvbn_match *matches[ZXCVBN_PASSWORD_LEN_MAX], *match, *match_bruteforce;
     struct zxcvbn_match_head *match_head;
 
+    assert(password_len > 0);
+    assert(password_len <= ZXCVBN_PASSWORD_LEN_MAX);
+
     bruteforce_card = calc_bruteforce_card(password, password_len, res->zxcvbn->n_symbols);
     pos_entropy[0] = 0;
 
@@ -1338,7 +1342,7 @@ zxcvbn_match_ex(struct zxcvbn_res *res,
                 struct zxcvbn_date *dates, unsigned int dates_num)
 {
     int i;
-    struct zxcvbn *zxcvbn;
+    struct zxcvbn *zxcvbn = res->zxcvbn;
     struct zxcvbn_match *match;
 
     assert(password_len > 0);
@@ -1347,21 +1351,25 @@ zxcvbn_match_ex(struct zxcvbn_res *res,
     if (!dates)
         dates_num = 0;
 
-    if (match_spatial(res, password, password_len))
+    if (!(zxcvbn->skipped_match_types & ZXCVBN_MATCH_TYPE_SPATIAL_M)
+            && match_spatial(res, password, password_len))
         return -1;
-    if (match_digits(res, password, password_len))
+    if (!(zxcvbn->skipped_match_types & ZXCVBN_MATCH_TYPE_DIGITS_M)
+            && match_digits(res, password, password_len))
         return -1;
-    if (zxcvbn_date_match(res, (char *) password, password_len,
-                          dates, dates_num))
+    if (!(zxcvbn->skipped_match_types & ZXCVBN_MATCH_TYPE_DATE_M)
+            && zxcvbn_date_match(res, (char *) password, password_len,
+                                 dates, dates_num))
         return -1;
-    if (zxcvbn_sequence_match(res, (char *) password, password_len))
+    if (!(zxcvbn->skipped_match_types & ZXCVBN_MATCH_TYPE_SEQUENCE_M)
+            && zxcvbn_sequence_match(res, (char *) password, password_len))
         return -1;
-    if (zxcvbn_repeat_match(res, (char *) password, password_len))
+    if (!(zxcvbn->skipped_match_types & ZXCVBN_MATCH_TYPE_REPEAT_M)
+            && zxcvbn_repeat_match(res, (char *) password, password_len))
         return -1;
-    if (match_dict(res, password, password_len, words, words_num))
+    if (!(zxcvbn->skipped_match_types & ZXCVBN_MATCH_TYPE_REPEAT_M)
+            && match_dict(res, password, password_len, words, words_num))
         return -1;
-
-    zxcvbn = res->zxcvbn;
 
     for (i = 0; i < res->n_matches; ++i) {
         match = res->matches + i;

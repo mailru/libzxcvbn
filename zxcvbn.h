@@ -28,6 +28,7 @@ struct zxcvbn_opts {
     zxcvbn_free_t       free;
     const char         *symbols;
     unsigned int        max_matches_num;
+    unsigned int        skipped_match_types;
 };
 
 struct zxcvbn_date {
@@ -67,6 +68,7 @@ struct zxcvbn {
     struct zxcvbn_spatial_graph spatial_graph_keypad;
     struct zxcvbn_spatial_graph spatial_graph_macpad;
     unsigned int max_matches_num;
+    unsigned int skipped_match_types;
 };
 
 enum zxcvbn_match_type {
@@ -78,6 +80,15 @@ enum zxcvbn_match_type {
     ZXCVBN_MATCH_TYPE_REPEAT,
     ZXCVBN_MATCH_TYPE_BRUTEFORCE,
 };
+
+// match type masks
+#define ZXCVBN_MATCH_TYPE_SPATIAL_M     (1 << ZXCVBN_MATCH_TYPE_SPATIAL)
+#define ZXCVBN_MATCH_TYPE_DIGITS_M      (1 << ZXCVBN_MATCH_TYPE_DIGITS)
+#define ZXCVBN_MATCH_TYPE_DATE_M        (1 << ZXCVBN_MATCH_TYPE_DATE)
+#define ZXCVBN_MATCH_TYPE_SEQUENCE_M    (1 << ZXCVBN_MATCH_TYPE_SEQUENCE)
+#define ZXCVBN_MATCH_TYPE_REPEAT_M      (1 << ZXCVBN_MATCH_TYPE_REPEAT)
+#define ZXCVBN_MATCH_TYPE_DICT_M        (1 << ZXCVBN_MATCH_TYPE_DICT)
+#define ZXCVBN_MATCH_TYPE_BRUTEFORCE_M  (1 << ZXCVBN_MATCH_TYPE_BRUTEFORCE)
 
 #define ZXCVBN_MATCH_DESC_SEQ   (1 << 0)
 

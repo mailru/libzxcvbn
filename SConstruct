@@ -1,4 +1,6 @@
-version = '0.3.1'
+version = '0.4.0'
+
+import os
 
 common_cflags = '-g -O2 -D_GNU_SOURCE -Wall -Wextra -Wmissing-prototypes ' + \
                 '-Wno-sign-compare -Wno-char-subscripts -Wno-unused-parameter'
@@ -12,13 +14,14 @@ AddOption('--libdir', dest='libdir', type='string', nargs=1, action='store',
 
 env = Environment(PREFIX=GetOption('prefix'),
                   LIBDIR=GetOption('libdir'),
-                  SHLIBVERSION=version)
+                  SHLIBVERSION=version,
+                  CFLAGS=os.environ.get('CFLAGS',''))
 
 libzxcvbn = env.SharedLibrary('zxcvbn', 'zxcvbn.c',
-                              CFLAGS=common_cflags)
+                              CFLAGS=common_cflags + ' $CFLAGS')
 zxcvbn_cli = env.Program('zxcvbn_cli', 'zxcvbn_cli.c',
                          LIBS=['zxcvbn', 'm'], LIBPATH='.',
-                         CFLAGS=common_cflags)
+                         CFLAGS=common_cflags + ' $CFLAGS')
 Default([libzxcvbn, zxcvbn_cli])
 
 env.Alias('install', [env.InstallVersionedLib('$LIBDIR', libzxcvbn),
