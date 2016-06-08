@@ -153,15 +153,15 @@ get_slant_coords(int coords[2][8], int x, int y)
 
 static void
 make_spatial_graph_iter(struct zxcvbn_spatial_graph *spatial_graph,
-                        const char **kb, unsigned int x_size, unsigned int y_size,
+                        const char **kb,
+                        unsigned int x_size, unsigned int y_size,
                         unsigned int token_size, unsigned int n_coords,
                         unsigned int get_coords(int coords[2][8], int x, int y))
 {
-#define  KB_XY(x, y) \
-    kb[x_size *y + x]
+#define  KB_XY(x, y) ((void *) kb[x_size *y + x])
 
     int x, y, i, coords[2][8], n_coords_get;
-    const char *s;
+    const unsigned char *s;
 
     assert(y_size >= 2);
 
@@ -188,7 +188,7 @@ make_spatial_graph_iter(struct zxcvbn_spatial_graph *spatial_graph,
     for (y = 0; y < 256; ++y) {
         for (x = 0; x < spatial_graph->n_coords; ++x) {
             if (spatial_graph->data[y][x] == NULL)
-                spatial_graph->data[y][x] = "\xff\xff";
+                spatial_graph->data[y][x] = (void *) "\xff\xff";
         }
     }
 
@@ -243,16 +243,20 @@ make_spatial_graph(struct zxcvbn *zxcvbn)
         { NULL, NULL, NULL, NULL, NULL, NULL, },
     };
 
-    make_spatial_graph_iter(&zxcvbn->spatial_graph_qwerty, (const char **)qwerty,
+    make_spatial_graph_iter(&zxcvbn->spatial_graph_qwerty,
+                            (const char **) qwerty,
                             KEYBRD_X_SIZE, KEYBRD_Y_SIZE, 2, 6, get_slant_coords);
 
-    make_spatial_graph_iter(&zxcvbn->spatial_graph_dvorak, (const char **)dvorak,
+    make_spatial_graph_iter(&zxcvbn->spatial_graph_dvorak,
+                            (const char **) dvorak,
                             KEYBRD_X_SIZE, KEYBRD_Y_SIZE, 2, 6, get_slant_coords);
 
-    make_spatial_graph_iter(&zxcvbn->spatial_graph_keypad, (const char **)keypad,
+    make_spatial_graph_iter(&zxcvbn->spatial_graph_keypad,
+                            (const char **) keypad,
                             KEYPAD_X_SIZE, KEYPAD_Y_SIZE, 1, 8, get_align_coords);
 
-    make_spatial_graph_iter(&zxcvbn->spatial_graph_macpad, (const char **)macpad,
+    make_spatial_graph_iter(&zxcvbn->spatial_graph_macpad,
+                            (const char **) macpad,
                             KEYPAD_X_SIZE, KEYPAD_Y_SIZE, 1, 8, get_align_coords);
 
 #undef KEYBRD_X_SIZE
@@ -364,7 +368,7 @@ match_spatial_iter(struct zxcvbn_res *res,
 {
     int i, j, cur_dir, prv_dir, turns, shifted;
     unsigned char cur, prv;
-    const char *s, *p;
+    const unsigned char *s, *p;
 
     i = j = 0;
     prv_dir = -1;
@@ -378,7 +382,7 @@ match_spatial_iter(struct zxcvbn_res *res,
             cur = password[j];
 
             for (cur_dir = 0; cur_dir < spatial_graph->n_coords; ++cur_dir) {
-                s = spatial_graph->data[prv][cur_dir];
+                s = (void *) spatial_graph->data[prv][cur_dir];
                 for (p = s; p - s < spatial_graph->token_size; ++p) {
                     if (*p == cur) {
                         shifted += p != s;
@@ -982,7 +986,7 @@ match_dict_iter(struct zxcvbn_res *res, struct zxcvbn_dict *dict, const char *pa
     for (i = 0; i < password_len; ++i) {
         parent = dict->root;
         for (j = i; j < password_len; ++j) {
-            if ((node = parent->children[password[j]]) == NULL)
+            if ((node = parent->children[(unsigned char) password[j]]) == NULL)
                 break;
             if (node->rank > 0) {
                 if (push_match_dict(res, i, j, node->rank) == NULL)
@@ -1101,7 +1105,7 @@ entropy_dict(struct zxcvbn *zxcvbn, struct zxcvbn_match *match, const char *pass
 static void
 entropy_spatial(struct zxcvbn *zxcvbn, struct zxcvbn_match *match)
 {
-    int i, j;
+    unsigned int i, j;
     unsigned int length, turns, possible_turns, S, U, min_SU;
     double possibilities;
     struct zxcvbn_spatial_graph *spatial_graph;
@@ -1144,7 +1148,7 @@ zxcvbn_init_ex(struct zxcvbn *zxcvbn, struct zxcvbn_opts *opts)
     static struct zxcvbn_opts default_opts;
     zxcvbn_malloc_t malloc_;
     int i, l33t;
-    const char *s;
+    const unsigned char *s;
 
     if (!opts)
         opts = &default_opts;
@@ -1175,6 +1179,7 @@ zxcvbn_init_ex(struct zxcvbn *zxcvbn, struct zxcvbn_opts *opts)
     }
 
     zxcvbn->max_matches_num = opts->max_matches_num;
+    zxcvbn->skipped_match_types = opts->skipped_match_types;
 
     LIST_INIT(&zxcvbn->dict_head);
 
@@ -1186,7 +1191,7 @@ zxcvbn_init_ex(struct zxcvbn *zxcvbn, struct zxcvbn_opts *opts)
     for (i = '0'; i <= '9'; ++i)
         zxcvbn->pack_table[i] = zxcvbn->pack_table_size++;
 
-    for (s = opts->symbols; *s != '\0'; ++s) {
+    for (s = (void *) opts->symbols; *s != '\0'; ++s) {
         if (zxcvbn->pack_table[*s] == '.') {
             zxcvbn->pack_table[*s] = zxcvbn->pack_table_size++;
             zxcvbn->n_symbols++;
@@ -1268,11 +1273,14 @@ zxcvbn_init(struct zxcvbn *zxcvbn_buf,
 static int
 min_entropy(struct zxcvbn_res *res, const char *password, unsigned int password_len)
 {
-    int pos, match_i;
+    int i, end, pos, match_i, matches[ZXCVBN_PASSWORD_LEN_MAX];
+    int min_matches[ZXCVBN_PASSWORD_LEN_MAX], min_matches_num;
     double pos_entropy[ZXCVBN_PASSWORD_LEN_MAX], entropy;
     unsigned int bruteforce_card;
-    struct zxcvbn_match *matches[ZXCVBN_PASSWORD_LEN_MAX], *match, *match_bruteforce;
-    struct zxcvbn_match_head *match_head;
+    struct zxcvbn_match *match;
+
+    assert(password_len > 0);
+    assert(password_len <= ZXCVBN_PASSWORD_LEN_MAX);
 
     bruteforce_card = calc_bruteforce_card(password, password_len, res->zxcvbn->n_symbols);
     pos_entropy[0] = 0;
@@ -1280,7 +1288,7 @@ min_entropy(struct zxcvbn_res *res, const char *password, unsigned int password_
     for (pos = 0; pos < password_len; ++pos) {
         pos_entropy[pos] = pos > 0 ? pos_entropy[pos - 1] : 0;
         pos_entropy[pos] += log2(bruteforce_card);
-        matches[pos] = NULL;
+        matches[pos] = -1;
 
         for (match_i = 0; match_i < res->n_matches; ++match_i) {
             match = res->matches + match_i;
@@ -1292,40 +1300,38 @@ min_entropy(struct zxcvbn_res *res, const char *password, unsigned int password_
 
             if (pos_entropy[pos] > entropy) {
                 pos_entropy[pos] = entropy;
-                matches[pos] = match;
+                matches[pos] = match_i;
             }
         }
     }
 
     res->entropy = pos_entropy[password_len - 1];
 
-    match_head = &res->match_head;
-    CIRCLEQ_INIT(match_head);
-
-    pos = password_len - 1;
-    while (pos >= 0) {
-        if ((match = matches[pos]) == NULL) {
-            --pos;
+    for (i = password_len - 1, end = -1, min_matches_num = 0; i >= 0;) {
+        if (matches[i] < 0) {
+            end = end < 0 ? i : end;
+            i--;
         } else {
-            CIRCLEQ_INSERT_HEAD(match_head, match, list);
-            pos = match->i - 1;
+            if (end >= 0) {
+                min_matches[min_matches_num++] = res->n_matches;
+                if (!push_match_bruteforce(res, i + 1, end, bruteforce_card))
+                    return -1;
+                end = -1;
+            }
+            min_matches[min_matches_num++] = matches[i];
+            i = res->matches[matches[i]].i - 1;
         }
     }
-
-    pos = 0;
-    CIRCLEQ_FOREACH(match, match_head, list) {
-        if (match->i > pos) {
-            if ((match_bruteforce = push_match_bruteforce(res, pos, match->i - 1, bruteforce_card)) == NULL)
-                return -1;
-            CIRCLEQ_INSERT_BEFORE(match_head, match, match_bruteforce, list);
-        }
-        pos = match->j + 1;
-    }
-
-    if (pos < password_len) {
-        if ((match_bruteforce = push_match_bruteforce(res, pos, password_len - 1, bruteforce_card)) == NULL)
+    if (end >= 0) {
+        min_matches[min_matches_num++] = res->n_matches;
+        if (!push_match_bruteforce(res, 0, end, bruteforce_card))
             return -1;
-        CIRCLEQ_INSERT_TAIL(match_head, match_bruteforce, list);
+    }
+
+    CIRCLEQ_INIT(&res->match_head);
+    for (i = 0; i < min_matches_num; i++) {
+        match = res->matches + min_matches[i];
+        CIRCLEQ_INSERT_HEAD(&res->match_head, match, list);
     }
 
     return 0;
@@ -1338,7 +1344,7 @@ zxcvbn_match_ex(struct zxcvbn_res *res,
                 struct zxcvbn_date *dates, unsigned int dates_num)
 {
     int i;
-    struct zxcvbn *zxcvbn;
+    struct zxcvbn *zxcvbn = res->zxcvbn;
     struct zxcvbn_match *match;
 
     assert(password_len > 0);
@@ -1347,21 +1353,25 @@ zxcvbn_match_ex(struct zxcvbn_res *res,
     if (!dates)
         dates_num = 0;
 
-    if (match_spatial(res, password, password_len))
+    if (!(zxcvbn->skipped_match_types & ZXCVBN_MATCH_TYPE_SPATIAL_M)
+            && match_spatial(res, password, password_len))
         return -1;
-    if (match_digits(res, password, password_len))
+    if (!(zxcvbn->skipped_match_types & ZXCVBN_MATCH_TYPE_DIGITS_M)
+            && match_digits(res, password, password_len))
         return -1;
-    if (zxcvbn_date_match(res, (char *) password, password_len,
-                          dates, dates_num))
+    if (!(zxcvbn->skipped_match_types & ZXCVBN_MATCH_TYPE_DATE_M)
+            && zxcvbn_date_match(res, (char *) password, password_len,
+                                 dates, dates_num))
         return -1;
-    if (zxcvbn_sequence_match(res, (char *) password, password_len))
+    if (!(zxcvbn->skipped_match_types & ZXCVBN_MATCH_TYPE_SEQUENCE_M)
+            && zxcvbn_sequence_match(res, (char *) password, password_len))
         return -1;
-    if (zxcvbn_repeat_match(res, (char *) password, password_len))
+    if (!(zxcvbn->skipped_match_types & ZXCVBN_MATCH_TYPE_REPEAT_M)
+            && zxcvbn_repeat_match(res, (char *) password, password_len))
         return -1;
-    if (match_dict(res, password, password_len, words, words_num))
+    if (!(zxcvbn->skipped_match_types & ZXCVBN_MATCH_TYPE_REPEAT_M)
+            && match_dict(res, password, password_len, words, words_num))
         return -1;
-
-    zxcvbn = res->zxcvbn;
 
     for (i = 0; i < res->n_matches; ++i) {
         match = res->matches + i;
@@ -1512,10 +1522,10 @@ zxcvbn_dict_add_word(struct zxcvbn_dict *dict, const char *word, unsigned int wo
     parent = dict->root;
 
     for (i = 0;; ++i) {
-        if ((node = parent->children[word_buf[i]]) == NULL) {
+        if ((node = parent->children[(unsigned char) word_buf[i]]) == NULL) {
             if ((node = make_node(dict->zxcvbn)) == NULL)
                 return -1;
-            parent->children[word_buf[i]] = node; 
+            parent->children[(unsigned char) word_buf[i]] = node; 
         }
 
         if (i == len - 1) {
